@@ -1,0 +1,395 @@
+---
+title: 'Maximum likelihood Lab 3: Stock-Recruitment'
+author: "< your name here >"
+date: "BIOHOPK 143H - Winter 2021"
+output: pdf_document
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(fig.height = 4, fig.width = 6, message = FALSE, warning = FALSE)
+
+### load the tidyverse packages
+if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
+
+### load the "FSAdata" package containing stock-recruitment data
+if (!require("FSAdata")) install.packages("FSAdata"); library(FSAdata)
+
+### load the "FSA" package containing some useful functions for exercises
+if (!require("FSA")) install.packages("FSA"); library(FSA)
+
+### Base R package that isn't loaded by default but we'll use later
+library(stats4)
+```
+
+
+# The Data
+
+We'll be using data on lake trout stock and recruitment at Gull Island Shoal, lake superior, from 1964 - 1991. In this data, the `stock` column is a geometric mean of the number of adult female lake trout from surveys, and the `recruits` column is a geometric mean of the number of recruits (age 0 trout) from surveys.
+
+When we load and plot the data, we can see that there hardly looks to be a relationship, as is fairly typical of stock-recruitment data - there's more noise than "signal."
+
+```{r}
+LakeTroutGIS %>% 
+  ggplot(aes(stock, recruits)) + 
+  geom_point()
+```
+
+# Stock-Recruitment Models
+
+## Density-Independence 
+
+In this lab, we're going to fit three different stock-recruitment relationships to these data. The first is a model assuming **density independence**, where the number of recruits per spawner is constant regardless of the size of the spawning stock, and there are no effects on recruitment from crowding or competition. This model is:
+
+$$
+R = aS
+$$
+
+Where $R$ is the number of recruits, $S$ is the number of adult female fish, and $a$ is the number of recruits arising from each female adult, which of course is proportional to the fecundity.
+
+## Beverton-Holt
+
+As you know, there are multiple ways to introduce density-dependence into this model. One option is the **Beverton-Holt** model: 
+
+$$
+R = \frac{aS}{1 + bS}
+$$
+
+In this model, $a$ describes the number of recruits per spawner at low biomass ($S \approx 0$), and $b$ is a parameter that controls the strength of density dependence - if there is *no* density dependence, than $b = 0$, and this model collapses to the density independent model. The peak recruitment under this model occurs at the asymptote, $R_p = a/b$.
+
+## Ricker
+
+While in the Beverton-Holt model recruitment reaches an asymptote as the spawning stock size increases, the Ricker model allows for recruitment to decline at high stock biomass. The stock-recruitment relationship for the Ricker model is: 
+
+$$
+R = a S e^{-bS}
+$$
+
+Where, again, $a$ is the number of recruits per spawner at low stock sizes, and $b$ is a parameter controlling the strength of density dependence - when $b = 0$, this model *also* collapses to the density-independent model. The peak recruitment occurs at an intermediate stock size ($1/b$), and the peak recruitment occurs at $R_p = a/be$.
+
+Let's plot the three of these models together to get an idea for what they look like. Play around with the values of $a$ and $b$ - what do you notice about the shape of the Beverton-Holt and Ricker stock-recruitment curves as you vary the parameters? 
+
+> 
+
+```{r}
+a <- 0.4
+b <- 0.05
+
+sr_curves <- tibble(
+  stock = seq(0, max(LakeTroutGIS$stock), length.out = 100), 
+  linear = a * stock, 
+  `Beverton-Holt` = (a * stock)/(1 + b * stock), 
+  Ricker = (a * stock) * (exp(-b * stock))
+)
+
+sr_curves %>% 
+  pivot_longer(cols = -stock, names_to = "form", values_to = "recruits") %>% 
+  ggplot(aes(stock, recruits))  + 
+  geom_line() + 
+  facet_wrap(~form, scales = "free_y")
+```
+
+# Likelihood functions
+
+It's typical of recruitment data for the variance to increase with the mean, because errors are often *multiplicative* instead of additive. Why might this be?
+
+> 
+
+Thus far, when we've used a normal likelihood function, we've assumed that the variance is constant (i.e., does not depend on the value of the predictors) - in this case, not only do we expect the variance to be greater for larger recruitment values, but we also know that recruitment can't be negative, so if our fitted recruitment value for stock size $S = 0$ is also 0 (i.e., $E(R|S = 0) = 0$), than our recruitment at $S = 0$ would be $R | S = 0 \sim \text{Normal}(0, \sigma^2)$, and half of the probability mass would be on recruitment values that aren't possible.
+
+We can solve this a number of ways - we could choose a probability distribution designed for non-negative, skewed data, such as the lognormal or Gamma distributions. Or, we could just log-transform our recruitment values and the corresponding stock-recruitment functions, and use a Normal distribution. For each of these models, this gives: 
+
+$$
+\begin{aligned}
+\log(R) &\sim \text{Normal}(\log(\mu), \sigma^2) \\
+\log(\mu) &= \log (aS) & \text{(linear)}\\
+\log(\mu) &= \log \left(\frac{aS}{1 + bS} \right) & \text{(Beverton-Holt)}\\
+\log(\mu) &= \log \left( a S e^{-bS} \right) & \text{(Ricker)}
+\end{aligned}
+$$
+
+I've written the first of these for you - you write the other two. The only constraints on these models are that $a, b >= 0$.
+
+```{r}
+## Negative log-likelihood for density-independent model
+linear_nll <- function(par, s, r) {
+  a <- par[1]; sigma <- par[2]
+  if (a >= 0) {
+    mu_r <- log(a * s)
+    nll <- -sum(dnorm(log(r), mean = mu_r, sd = sigma, log = TRUE))
+    return(nll)
+  } else {
+    return(5000)
+  }
+}
+
+## Negative log-likelihood for Beverton-Holt model
+beverton_nll <- function(par, s, r) {
+ ## YOUR CODE HERE
+}
+
+## Negative log-likelihood for Ricker model
+ricker_nll <- function(par, s, r) {
+ ## YOUR CODE HERE
+}
+```
+
+# Initial values
+
+## recruit-to-spawner ratio - a
+
+We can obtain initial values for $a$ the first model using a linear regression (in fact, this would give our MLE for $a$ if we assumed a Normal distribution). We'll store this value, and the initial values for $a$ in the other two models, to a list. We can fix the intercept at 0 by including a 0 in our formula:
+
+```{r}
+sr_lm <- lm(recruits ~ 0 + stock, data = LakeTroutGIS)
+a_init <- list("linear" = as.numeric(coef(sr_lm)))
+```
+
+For the $a$ coefficient in the Beverton-Holt and $Ricker$ models, one way that we can obtain reasonable starting values by fitting the same regression to the data at small stock sizes. This definitely isn't the best way - the `FSA` package provides a less shoddy method with the `srStarts` function, but it's intuitive and it's easy:
+
+```{r}
+sr_lm0 <- lm(recruits ~ 0 + stock, data = LakeTroutGIS[LakeTroutGIS$stock < 30, ])
+a_init$beverton <- a_init$ricker <- as.numeric(coef(sr_lm0))
+```
+
+Printing our three (really two) starting values: 
+
+```{r}
+unlist(a_init)
+```
+
+## density-dependent parameter - b
+
+For the Beverton-Holt model, we know that the asymptote occurs at $a/b$. To my eyes, the asymptote occurs at about 20, so this gives a starting value for $b$ of $a/20 \approx 0.06$. 
+
+For the Ricker model, the peak recruitment (which to me looks to be about 25) occurs at $R_p = a/be$ (so $b = a / (R_p e)$), so an initial value for $b$ could be $b = a/(25\times e) \approx 0.006$.
+
+Let's store these in a list:
+
+```{r}
+b_init <- list(
+  beverton = a_init$beverton/20, 
+  ricker = a_init$ricker/(25 * exp(1))
+)
+
+unlist(b_init)
+```
+
+## Sigma
+
+Finally, we need an initial value for the standard deviation of the residuals. Of course, a good starting value is... the standard deviation of the residuals. So, taking the log of the recruitment and stock size and fitting a regression:
+
+```{r}
+sr_lm_log <- lm(log(recruits) ~ log(stock), data = LakeTroutGIS)
+sigma_init <- sd(resid(sr_lm_log))
+sigma_init
+```
+
+
+Now, let's plot the stock recruitment curves given by our chosen starting values to make sure they're reasonable:
+
+```{r}
+sr_curves <- tibble(
+  stock = seq(0, max(LakeTroutGIS$stock), length.out = 100), 
+  linear = a_init$linear * stock, 
+  `Beverton-Holt` = (a_init$beverton * stock)/(1 + b_init$beverton * stock), 
+  Ricker = (a_init$ricker * stock) * (exp(-b_init$ricker * stock))
+)
+
+sr_curves %>% 
+  pivot_longer(cols = -stock, names_to = "form", values_to = "recruits") %>% 
+  ggplot(aes(stock, recruits))  + 
+  geom_point(data = LakeTroutGIS) + 
+  geom_line() + 
+  facet_wrap(~form, scales = "free_y")
+```
+
+
+# Maximum-Likelihood Estimates
+
+By now, we know that obtaining the MLE once we've already written down the likelihood functions and obtained starting values is pretty easy:
+
+```{r}
+linear_mle <- optim(
+  par = c(a = a_init$linear, sigma = sigma_init), 
+  fn = linear_nll, 
+  s = LakeTroutGIS$stock, 
+  r = LakeTroutGIS$recruits,
+  hessian = TRUE
+)
+
+beverton_mle <- optim(
+  par = c(a = a_init$beverton, b = b_init$beverton, sigma = sigma_init), 
+  fn = beverton_nll, 
+  s = LakeTroutGIS$stock, 
+  r = LakeTroutGIS$recruits, 
+  hessian = TRUE
+)
+
+ricker_mle <- optim(
+  par = c(a = a_init$ricker, b = b_init$ricker, sigma = sigma_init), 
+  fn = ricker_nll, 
+  s = LakeTroutGIS$stock, 
+  r = LakeTroutGIS$recruits, 
+  hessian = TRUE
+)
+```
+
+Printing the fitted values: 
+
+```{r}
+MLE <- list(
+  "linear" = linear_mle$par, 
+  "Beverton-Holt" = beverton_mle$par, 
+  "Ricker" = ricker_mle$par
+)
+MLE
+```
+
+And their standard errors: 
+
+```{r}
+var_cov <- list(
+  "linear" = solve(linear_mle$hessian), 
+  "Beverton-Holt" = solve(beverton_mle$hessian), 
+  "Ricker" = solve(ricker_mle$hessian)
+)
+
+se <- lapply(var_cov, function(x) sqrt(diag(x)))
+se
+```
+
+Let's plot the fitted curves implied by our maximum likelihood estimates for $a$ and $b$:
+
+```{r}
+sr_curves <- tibble(
+  stock = seq(0, max(LakeTroutGIS$stock), length.out = 100), 
+  linear = linear_mle$par[1] * stock, 
+  `Beverton-Holt` = (beverton_mle$par[1] * stock)/(1 + beverton_mle$par[2] * stock), 
+  Ricker = (ricker_mle$par[1] * stock) * (exp(-ricker_mle$par[2] * stock))
+)
+
+sr_curves %>% 
+  pivot_longer(cols = -stock, names_to = "form", values_to = "recruits") %>% 
+  ggplot(aes(stock, recruits))  + 
+  geom_point(data = LakeTroutGIS) + 
+  geom_line() + 
+  facet_wrap(~form, scales = "free_y")
+```
+
+
+# Likelihood Slices
+
+Here are likelihood slices for each of these models - for each model, I've plotted the negative log likelihood as a function of the parameter values, while holding $\sigma$ at its maximum likelihood estimate.
+
+## Density-Independent Model
+
+```{r}
+a_seq <- seq(0.1, 1, length.out = 100)
+nll_linear <- rep(NA, length(a_seq))
+
+for (i in 1:length(a_seq)) {
+  nll_linear[i] <- linear_nll(
+    c(a_seq[i], sigma = linear_mle$par[2]), 
+    s = LakeTroutGIS$stock,
+    r = LakeTroutGIS$recruits
+  )
+}
+
+data.frame(a = a_seq, nll = nll_linear) %>% 
+  ggplot(aes(a, nll)) + 
+  geom_line() + 
+  geom_vline(aes(xintercept = linear_mle$par[1]), linetype = "dashed")
+```
+
+## Beverton-Holt Model
+
+```{r}
+a_seq <- seq(0.1, 1, length.out = 100)
+b_seq <- seq(0.0001, 0.05, length.out = 100)
+par_grid <- expand.grid(a = a_seq, b = b_seq)
+
+for (i in 1:nrow(par_grid)) {
+  par_grid$nll_beverton[i] <- beverton_nll(
+    c(par_grid$a[i], par_grid$b[i], sigma = beverton_mle$par[3]), 
+    s = LakeTroutGIS$stock,
+    r = LakeTroutGIS$recruits
+  )
+}
+
+par_grid %>% 
+  ggplot(aes(a, b, z = nll_beverton)) +
+  geom_contour_filled() + 
+  geom_point(aes(x = beverton_mle$par[1], y = beverton_mle$par[2]), 
+             color = "white")
+```
+
+## Ricker Model 
+
+```{r}
+for (i in 1:nrow(par_grid)) {
+  par_grid$nll_ricker[i] <- ricker_nll(
+    c(par_grid$a[i], par_grid$b[i], sigma = ricker_mle$par[3]), 
+    s = LakeTroutGIS$stock,
+    r = LakeTroutGIS$recruits
+  )
+}
+
+par_grid %>% 
+  ggplot(aes(a, b, z = nll_ricker)) +
+  geom_contour_filled() + 
+  geom_point(aes(x = ricker_mle$par[1], y = ricker_mle$par[2]), 
+             color = "white")
+```
+
+# Exercises
+
+## 1. Confidence intervals
+
+Do you think asymptotic (i.e. Normal) confidence intervals would be a good choice for the $a$ and $b$ parameters in the Beverton-Holt and Ricker models? In answering this question, think about (1) the maximum-likelihood estimates, (2) the Fisher standard errors on those estimates, and (3) the shape of the likelihood slices we plotted. Note: I'm not actually asking you to compute confidence intervals for this question.
+
+> 
+
+## 2. Model Selection
+
+Compute AIC for each of these models. To make this quicker, I've defined a function below that takes the output of `optim` and computes and AIC value. Based on AIC, is there any evidence for density-dependence in the stock-recruitment relationship?
+
+```{r}
+AIC <- function(opt) 2*length(opt$par) + 2*opt$value 
+
+## YOUR CODE HERE
+
+```
+
+## 3. Likelihood-ratio tests
+
+We can also assess whether there's density-dependence or not using a likelihood ratio test, by fixing the parameter $b$ in either the Beverton-Holt or Ricker model to zero (in which case, the model collapses to the density-independent model), and then computing a likelihood-ratio test. Let's load a dataset containing stock recruitment data for a different part of lake Superior, and conduct this test with the Ricker model, using the `linear_nll` function to fit our density-independent model.
+
+```{r}
+MI7 <- LakeTroutMI %>% filter(area == "MI7" & !is.na(recruits)) 
+MI7 %>% ggplot(aes(stocked, recruits)) + geom_point()
+```
+
+We'll just shortcut the whole process of choosing parameter values for $a$ and $b$ by using the `srStarts` function from the `FSA` ("fisheries stock assessment") package: 
+
+```{r}
+## initial values for a and b
+ricker_init <- unlist(srStarts(recruits ~ stocked, data = MI7, type = "Ricker"))
+```
+
+and again we'll choose an initial value for sigma with linear regression: 
+
+```{r}
+MI7_lm <- lm(log(recruits) ~ 0 + log(stocked), data = MI7)
+
+## vector of initial parameters for linear fit
+linear_init <- c(a = as.numeric(coef(MI7_lm)), sigma = sd(resid(MI7_lm)))
+
+## add sigma to initial values for ricker model
+ricker_init[["sigma"]] <- sd(resid(MI7_lm))
+```
+
+Now, fit the Ricker and density-independent models and compute the likelihood ratio test using the procedure given in the exercises from the first lab. Is there evidence for density-dependence in the stock-recruitment relationship for this population?
+
+```{r}
+### YOUR CODE HERE
+```
