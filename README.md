@@ -12,7 +12,7 @@ The subsections for this part of the course are as follows:
 - **Lab 1** covers the basics of maximum likelihood estimation, using ordinary linear regression as an example.
 - **Lab 2** uses maximum likelihood to estimate the parameters of functional responses. The lab pulls heavily on examples from Ben Bolker's book, *Ecological models and data in R*, and the associated R package `emdbook`.
 - **Lab 3** uses maximum likelihood to fit and compare stock-recruitment curves. The lab uses example data from the `FSAdata` R package.
-- **Lab 4** fits a dynamic Beverton-Holt model to data on a harvested abalone population, including and AR1 error structure. Please contact me for the data, as they are not published.
+- **Lab 4** fits a dynamic Beverton-Holt model to data on a harvested abalone population, including and AR1 error structure.
 
 **2. Bayesian models**
 

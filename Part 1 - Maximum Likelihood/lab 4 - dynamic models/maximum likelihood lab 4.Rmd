@@ -432,7 +432,7 @@ alpha
 
 ## Finite Growth Rate
 
-We can obtain an asymptotic 95% confidence interval for $\lambda$ with: 
+We can obtain an asymptotic (Fisher) 95% confidence interval for $\lambda$ with: 
 
 ```{r}
 lambda <- bh_mle_AR1$par[["lambda"]]
@@ -440,7 +440,14 @@ lambda_CI <- qnorm(c(0.025, 0.975), lambda, sd = se_AR1[["lambda"]])
 lambda_CI
 ```
 
-Do you think this is a realistic confidence interval? Based on the confidence interval, what do you think the likelihood profile for $\lambda$ looks like? 
+Compute an asymptotic confidence interval for $\lambda$ using the model that does not include an AR1 error structure (the MLE is stored in `bh_mle` and the standard errors are stored in `se`).
+
+```{r}
+### YOUR CODE HERE
+```
+
+
+Which confidence interval is wider? Based on the model *without* an AR1 correction, is there significant evidence that the population's finite growth rate is greater than 1? What about *with* an AR1 correction?
 
 > 
 
