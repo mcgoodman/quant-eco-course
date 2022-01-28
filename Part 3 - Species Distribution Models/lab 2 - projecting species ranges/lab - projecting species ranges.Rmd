@@ -1,0 +1,152 @@
+---
+title: "Projecting the future range of California thrashers"
+author: "< your name here >"
+date: "BIOHOPK 143H - Winter 2022"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(fig.height = 4, fig.width = 6, message = FALSE, warning = FALSE)
+
+### load the tidyverse packages
+if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
+
+### load the "mgcv" package for fitting GAMs
+if (!require("mgcv")) install.packages("mgcv"); library(mgcv)
+
+### load the "dismo" package, which has a bunch of helper functions for SDMs
+if (!require("dismo")) install.packages("dismo"); library(dismo)
+```
+
+# Introduction
+
+## The California thrasher
+
+[The California thrasher](https://www.allaboutbirds.org/guide/California_Thrasher/overview) is a nonmigratory species of songbird commonly sighted in California chaparral (shrubland) ecosystems. The California thrasher is something of a famous bird in ecology and biogeography - Joseph Grinnell's 1917 paper, "[the niche-relationships of the California thrasher](https://www.jstor.org/stable/4072271?seq=1#metadata_info_tab_contents)," introduced the ecological niche concept to ecology. In the paper, Grinnell aimed to discern the processes that shaped the thrasher's notably limited geographic range, which extends from Northern Baja to Northern California.
+
+The "Grinnellian niche," now one of several niche "concepts," defines the niche as the habitat requirements and behaviors that allow species to survive and reproduce in a given habitat. This niche concept underlies the modern study of biogeography and the practice of correlative species distribution modeling, which uses statistical models and machine learning algorithms to approximate the underlying determinants of species geographic ranges.
+
+In this lab, we'll apply species distribution models to characterize the niche of the California thrasher ourselves - then, we'll take that niche model and project it forward in time using climate projections under two different emissions scenarios.
+
+## BIOCLIM variables
+
+In this lab, we'll work with the "BIOCLIM" variables, which are frequently used in terrestrial species distribution models and are derived from spatially-explicit monthly temperature and precipitation values. These values are not usually temporally explicit - here, we're using BIOCLIM values calculated over the period of 1970-2000. The data file for this lab ("thrasher_occurrence_data.csv") contains California thrasher presence/absence $^\Delta$ data from across the state of California, along with 19 BIOCLIM variables, plus the latitude, longitude, and elevation (in meters) associated with each point. From [the WorldClim website](https://www.worldclim.org/data/bioclim.html), the BIOCLIM variables are:
+
+-   **BIO1** = Annual Mean Temperature
+
+-   **BIO2** = Mean Diurnal Range (Mean of monthly (max temp - min temp))
+
+-   **BIO3** = Isothermality (BIO2/BIO7) (×100)
+
+-   **BIO4** = Temperature Seasonality (standard deviation ×100)
+
+-   **BIO5** = Max Temperature of Warmest Month
+
+-   **BIO6** = Min Temperature of Coldest Month
+
+-   **BIO7** = Temperature Annual Range (BIO5-BIO6)
+
+-   **BIO8** = Mean Temperature of Wettest Quarter
+
+-   **BIO9** = Mean Temperature of Driest Quarter
+
+-   **BIO10** = Mean Temperature of Warmest Quarter
+
+-   **BIO11** = Mean Temperature of Coldest Quarter
+
+-   **BIO12** = Annual Precipitation
+
+-   **BIO13** = Precipitation of Wettest Month
+
+-   **BIO14** = Precipitation of Driest Month
+
+-   **BIO15** = Precipitation Seasonality (Coefficient of Variation)
+
+-   **BIO16** = Precipitation of Wettest Quarter
+
+-   **BIO17** = Precipitation of Driest Quarter
+
+-   **BIO18** = Precipitation of Warmest Quarter
+
+-   **BIO19** = Precipitation of Coldest Quarter
+
+$^\Delta$ Actually, these are presence and *pseudo*-absence data - I've obtained presences from a citizen science database (eBird), which reflects *only* where California thrashers have been observed (not where they weren't observed), and I've created fake absence points so that these data can be used with a model that requires presence *and* absence values (i.e., any parametric statistical model such as a GLM or GAM). This is a common practice, and the method we use to construct these pseudo-absences can be important, but we're going to gloss over those complexities in this lab. Once created, we proceed with these data as if they were real presence-absence data.
+
+## Future climate estimates
+
+We can partition future uncertainty about climate change into three components: (1) uncertainty in future greenhouse gas emissions, (2) differences in modeling methodologies, and (3) uncertainty pertaining to each model.
+
+Uncertainty in emissions arises from the fact that we can't predict many of the factors that control emissions - government policies, technological development, global inequality and international politics, for example. Rather than choose a "most likely" scenarios, the IPCC relies on several different scenarios, called "[Shared Socioeconomic Pathways](https://www.carbonbrief.org/explainer-how-shared-socioeconomic-pathways-explore-future-climate-change)" (SSPs). These SSPs range from a path of sustainability in which global emissions decline along side material growth and resource use (SSP1), to a world in which fossil fuel use is ever increasing (SSP5). Here, we'll use SSP2-4.5, a "middle of the road" scenario limiting global warming to 3C by 2100, and SSP5-8.5, a "worst case" scenario with warming above 4C.
+
+While characterizing changes in global mean temperature as a result of increased atmospheric CO~2~ is *relatively* straightforward, obtaining spatially explicit forecasts of the the impacts of climate change is much less so - consider, for example, the uncertainty in weather forecasts only a few days out. We overcome this in a couple of ways - first, by aggregating forecasts across large time windows (in this lab, we'll use 2081-2100), and second, by relying on *many* different climate models, each of which is validated by hindcasting (i.e., iterating the model *backward* in time instead of foward). [CMIP6](https://www.carbonbrief.org/cmip6-the-next-generation-of-climate-models-explained) includes about 100 different models from different research groups - here, we'll use just one model ([BCC-CSM2-MR](https://gmd.copernicus.org/articles/12/1573/2019/)), but when projecting future species distributions it's common to use multiple.
+
+# 1 - Build and evaluate your SDM
+
+Let's start by reading in the data - the thrasher occurrence data, the 1970-2000 BIOCLIM maps for California, and projections for California's climate under the SSP2-4.5 and SSP5-8.5 scenarios:
+
+```{r}
+thrasher <- read.csv("thrasher_occurrence_data.csv")
+bioclim <- read.csv("bioclim_1970-2000.csv")
+ssp245 <- read.csv("bioclim_2081-2100_ss245.csv")
+ssp585 <- read.csv("bioclim_2081-2100_ss585.csv")
+```
+
+## Choose an initial set of predictors
+
+**Question 1:** Read Grinnell 1917. What environmental variables (biotic or abiotic) do you think would make good predictors in a species distribution model for California thrasher?
+
+> **Answer:**
+
+**Question 2:** Read the descriptions of each of the BIOCLIM variables above. Choose an initial six variables that you think would be good predictors based on your knowledge of the California thrasher's ecology. Are there any variables that you'd like to include that aren't available in this dataset? If so, are there any BIOCLIM variables which might be a useful proxy for the variables you don't have?
+
+> **Answer:**
+
+**Remove colinear predictors:** Now, plot the six BIOLCIM variables against each other, and compute pairwise correlations among them. If a pair of variables are highly correlated (cor \> 0.9), choose which you think is most appropriate and drop the other. For example, `bio3` and `bio4` have a correlation of 0.91 in this dataset, so we would want to use either `bio3` or `bio4` in our model, but not both.
+
+```{r}
+## YOUR CODE HERE
+## Subset `thrasher` data frame to your chose BIOCLIM variables
+## use the `pairs()` and `cor()` functions to evaluate colinearity
+```
+
+## Fit competing models
+
+Now, let's fit multiple different models using combinations of your chosen BIOCLIM variables as predictors. In each model, you can have as few as 1 predictor or as many as 6. These will, of course, be Bernoulli GAMs. For example:
+
+```{r eval = FALSE}
+thrasher_gam <- gam(
+  present ~ s(bio1) + s(bio2) + s(bio3), 
+  data = thrasher, 
+  family = binomial(link = "logit")
+)
+```
+
+or:
+
+```{r}
+## Same predictors as above, but now we fit a quadratic effect of bio1 and a linear effect of bio3, and keep bio2 as a smooth term
+thrasher_gam <- gam(
+  present ~ poly(bio1, 2) + s(bio2) + bio3, 
+  data = thrasher, 
+  family = binomial(link = "logit")
+)
+```
+
+Try at least 10 models. For each model, compute the AIC and record that AIC along with the model terms (somewhere else - you don't have to record it here). Typically, we would keep all models within 2AIC of each, and average across these models. Here though, just choose the model with the lowest AIC, or choose a model that makes the most sense to you from those within 2AIC of the "best" model's AIC. Provide the model code below:
+
+```{r}
+## YOUR CODE HERE
+```
+
+## Present
+
+In your group presentation, you should cover the following things from this section:
+
+1.  The initial set of environmental predictors you chose, and why
+2.  The final model structure and code
+
+# 2 - Test Model Terms
+
+# 3 - Project current and future ranges
+
+# 4 - Derive range characteristics
