@@ -16,9 +16,6 @@ if (!require("mgcv")) install.packages("mgcv"); library(mgcv)
 
 ### load the "dismo" package, which has a bunch of helper functions for SDMs
 if (!require("dismo")) install.packages("dismo"); library(dismo)
-
-### geoR package - used for plotting variograms
-if (!require("geoR")) install.packages("geoR"); library(geoR)
 ```
 
 # Introduction
@@ -79,7 +76,7 @@ $^\Delta$ Actually, these are presence and *pseudo*-absence data - I've obtained
 
 We can partition future uncertainty about climate change into three components: (1) uncertainty in future greenhouse gas emissions, (2) differences in modeling methodologies, and (3) uncertainty pertaining to each model.
 
-Uncertainty in emissions arises from the fact that we can't predict many of the factors that control emissions - government policies, technological development, global inequality and international politics, for example. Rather than choose a "most likely" scenarios, the IPCC relies on several different scenarios, called "[Shared Socioeconomic Pathways](https://www.carbonbrief.org/explainer-how-shared-socioeconomic-pathways-explore-future-climate-change)" (SSPs). These SSPs range from a path of sustainability in which global emissions decline along side material growth and resource use (SSP1), to a world in which fossil fuel use is ever increasing (SSP5). Here, we'll use SSP2-4.5, a "middle of the road" scenario limiting global warming to 3C by 2100, and SSP5-8.5, a "worst case" scenario with warming above 4C.
+Uncertainty in emissions arises from the fact that we can't predict many of the factors that control emissions - government policies, technological development, global inequality and international politics, for example. Rather than choose a "most likely" scenario, the IPCC relies on several different scenarios, called "[Shared Socioeconomic Pathways](https://www.carbonbrief.org/explainer-how-shared-socioeconomic-pathways-explore-future-climate-change)" (SSPs). These SSPs range from a path of sustainability in which global emissions decline alongside material growth and resource use (SSP1), to a world in which fossil fuel use is ever increasing (SSP5). Here, we'll use SSP2-4.5, a "middle of the road" scenario limiting global warming to 3C by 2100, and SSP5-8.5, a "worst case" scenario with warming above 4C.
 
 While characterizing changes in global mean temperature as a result of increased atmospheric CO~2~ is *relatively* straightforward, obtaining spatially explicit forecasts of the the impacts of climate change is much less so - consider, for example, the uncertainty in weather forecasts only a few days out. We overcome this in a couple of ways - first, by aggregating forecasts across large time windows (in this lab, we'll use 2081-2100), and second, by relying on *many* different climate models, each of which is validated by hindcasting (i.e., iterating the model *backward* in time instead of foward). [CMIP6](https://www.carbonbrief.org/cmip6-the-next-generation-of-climate-models-explained) includes about 100 different models from different research groups - here, we'll use just one model ([BCC-CSM2-MR](https://gmd.copernicus.org/articles/12/1573/2019/)), but when projecting future species distributions it's common to use multiple.
 
@@ -145,7 +142,7 @@ thrasher_gam <- gam(
 
 **Note:** There are several criteria that one might use to choose a "best" model - these include likelihood-based measures (AIC, BIC), but also measures of out-of-sample prediction ("cross validation"), in which subsets of the data are withheld from the model, and then used to test the model's predictive accuracy on data which it was not fitted to. With SDMs, the spatial nature of the data makes it so that there are multiple ways we might perform cross-validation.
 
-**Question 3:** With this model in hand, use the `gam.check` function to check whether the estimated degrees of freedom in each term are appropriate (a low p-value indicates that you may want to increase the number of degrees of freedom for that smooth function). Does `gam.check` suggest that your degrees of freedom may be too low for some predictors? Do you think that doing so makes sense ecologically or not?
+**Question 3:** With this model in hand, use the `gam.check()` function to check whether the estimated degrees of freedom in each term are appropriate (a low p-value indicates that you may want to increase the number of degrees of freedom for that smooth function). Does `gam.check()` suggest that your degrees of freedom may be too low for some predictors? Do you think that increasing that degrees of freedom for these predictors makes sense ecologically or not?
 
 > **Answer:**
 
@@ -157,13 +154,19 @@ thrasher_gam <- gam(
 )
 ```
 
+## Model Performance
+
+**Question 4:** Use `dismo::evaluate()` to plot the ROC curve and extract the AUC value. Does your AUC score suggest that the model is able to accurately discriminate between presences and absences?
+
+> **Answer:**
+
 ## Present
 
 In your group presentation, you should cover the following things from this section:
 
 1.  The initial set of environmental predictors you chose, and why
 2.  Whether you decided to increase k for any of your smooth functions, and if so, which ones and why
-3.  The final model structure and code
+3.  The final model structure and code, and the AUC score
 
 # 2 - Model Terms
 
@@ -171,7 +174,7 @@ In your group presentation, you should cover the following things from this sect
 
 The most straightforward way to characterize the niche, in terms of each of the predictors in the model, is for us to plot the fitted model smooth functions and interpret the plots.
 
-Let's do this for our chosen model. Use the `plot` function to plot the smooths from the fitted model. You may also want to use the argument `scale = 0` so that the plots are not constrained to have the same y-axis, and `shade = TRUE` to produce a shaded error band (just for aesthetics, really).
+Let's do this for our chosen model. Use the `plot()` function to plot the smooths from the fitted model. You may also want to use the argument `scale = 0` so that the plots are not constrained to have the same y-axis, and `shade = TRUE` to produce a shaded error band (just for aesthetics, really).
 
 ```{r}
 ## YOUR CODE HERE
@@ -189,17 +192,17 @@ Now, plot the smooth functions on the transformed scale:
 ## YOUR CODE HERE
 ```
 
-**Question 4:** Interpret these plots - according to your model, what is the preferred habitat of the California thrasher?
+**Question 5:** Interpret these plots - according to your model, what is the preferred habitat of the California thrasher?
 
 > **Answer:**
 
 There's one problem with this, however - this model is only additive on the link scale. Once we back transform the values, the shape of these smooth terms depends on the values of the other predictors in the model. Instead, we can create a **marginal effects plot** - we plot the effects of each variable, holding the values of the other predictors at some constant value (e.g., their mean). To do this:
 
 1.  Create a data frame with one column containing a range of values for our variable of interest (for example, `bio1`), and with columns for each of the other predictors, each of which is held at their mean.
-2.  Obtain model predictions and standard errors by using the `predict` function on this new data frame.
+2.  Obtain model predictions and standard errors by using the `predict()` function on this new data frame.
 3.  Back-transform the fitted values, and the fitted values +/- their standard errors to get the upper and lower bounds of our error bands.
 
-**Question 4:** Do this for one of the terms in your model. Interpret the results.
+**Question 6:** Do this for one of the terms in your model. Interpret the results.
 
 > **Answer:**
 
@@ -213,7 +216,7 @@ In your group presentation, include 1 slide for each model term in your final mo
 
 # 3 - Project current and future ranges
 
-## Plot distributions
+## Plot distributions - probability of occurrence
 
 BIOCLIM variables across the state of California for 1970-2000 and for the two climate scenarios projected out to 2081-2100 are contained in the `bioclim`, `ssp245`, and `ssp585` data frames.
 
@@ -223,7 +226,31 @@ Obtain fitted probability of occurrence values for each of these data frames:
 ## YOUR CODE HERE
 ```
 
-Plot the current (1970-2000) and projected distributions (under both scenarios) using `ggplot` and `geom_raster`. You might also use `scale_color_viridis_c` with `option = "magma"` - it's better looking and easier to read than the default ggplot color scheme.
+Plot the current (1970-2000) and projected distributions (under both scenarios) using `ggplot()` and `geom_raster()`. You might also use `scale_color_viridis_c()` with `option = "magma"` - it's better looking and easier to read than the default ggplot color scheme.
+
+```{r}
+## YOUR CODE HERE - 1970-2000
+```
+
+```{r}
+## YOUR CODE HERE - 2081-2100, SSP 2 4.5
+```
+
+```{r}
+## YOUR CODE HERE - 2018-2100, SSP 5 8.5
+```
+
+## Plot distributions - presence/absence
+
+To create a map of where we expect thrashers to be present (and where we expect them to be absence), we need to bin the probability of occurrence values estimated by our model. This means we need to choose a threshold probability at which to label the thrasher as "present."
+
+Apply `dismo::threshold()` to the output from `dismo::evaluate()` (that you computed above) to obtain the threshold probability that maximizes the sum of sensitivity and specificity. Create a new column in the `bioclim`, `ssp245`, and `ssp585` data frames indicating whether we expect thrasher to be present or absent in each grid cell:
+
+```{r}
+## YOUR CODE HERE
+```
+
+Plot these binary presence-absence values across space (let's call this the map of suitable habitat). For aesthetic reasons, it may be good to convert the predicted presence/absence values to character strings, and manually choose colors for "present" and "absent" using the ggplot `scale_color_manual()` function.
 
 ```{r}
 ## YOUR CODE HERE - 1970-2000
@@ -239,6 +266,28 @@ Plot the current (1970-2000) and projected distributions (under both scenarios) 
 
 ## Present
 
-In your presentation, include 1 slide for each of the range plots above. Interpret the current range and projected range under both scenarios./
+In your presentation, include 1 slide each for the 1970-2000 distribution, the 2081-2100 distribution under our "middle of the road" scenario, and the 2081-2100 distribution under our "worst case" scenario. In each slide, include both the distribution colored by probability of occurrence and the distribution of suitable habitat.
+
+Interpret the current range and projected range under both scenarios - do the distributional shifts seem feasible / are there any barriers to these distributional shifts occurring that you can think of?
 
 # 4 - Derive range characteristics
+
+## Center of gravity and area occupied
+
+**Question 7:** Compute the mean latitude weighted by probability of occurrence for each of these projections (the latitudinal coordinate of the center of gravity). Under each climate scenario, in which direction do we expect the centroid of the thrasher's range to move (relative to the baseline)?
+
+> **Answer:**
+
+```{r}
+## YOUR CODE HERE
+```
+
+Compute the proportion of California that we expect the California thrasher to occupy for all three fitted maps:
+
+```{r}
+## YOUR CODE HERE
+```
+
+## Present
+
+Include these statistics in your slides alongside your projected distributions. Interpret the results.
