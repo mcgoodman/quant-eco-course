@@ -6,7 +6,7 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(fig.height = 4, fig.width = 6, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(fig.height = 4, fig.width = 6)
 
 ### load the tidyverse packages
 if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
@@ -132,15 +132,13 @@ thrasher_gam <- gam(
 )
 ```
 
-Try at least 10 models. For each model, compute the AIC and record that AIC along with the model terms (somewhere else - you don't have to record it here). Typically, we would keep all models within 2AIC of each, and average across these models. Here though, just choose the model with the lowest AIC, or choose a model that makes the most sense to you from those within 2AIC of the "best" model's AIC. Provide the model code below:
+Try at least 10 models. For each model, compute the AIC and record that AIC along with the model terms (somewhere else - you don't have to record it here). Typically, we would keep all models within 2AIC of each, and average across these models. Here though, just choose the model with the lowest AIC, or choose a model that makes the most sense to you from those within 2AIC of the "best" model's AIC. Provide the code for the best-fit model below:
 
 ```{r}
 thrasher_gam <- gam(
   ## YOUR CODE HERE
 )
 ```
-
-**Note:** There are several criteria that one might use to choose a "best" model - these include likelihood-based measures (AIC, BIC), but also measures of out-of-sample prediction ("cross validation"), in which subsets of the data are withheld from the model, and then used to test the model's predictive accuracy on data which it was not fitted to. With SDMs, the spatial nature of the data makes it so that there are multiple ways we might perform cross-validation.
 
 **Question 3:** With this model in hand, use the `gam.check()` function to check whether the estimated degrees of freedom in each term are appropriate (a low p-value indicates that you may want to increase the number of degrees of freedom for that smooth function). Does `gam.check()` suggest that your degrees of freedom may be too low for some predictors? Do you think that increasing that degrees of freedom for these predictors makes sense ecologically or not?
 
