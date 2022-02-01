@@ -16,6 +16,9 @@ if (!require("mgcv")) install.packages("mgcv"); library(mgcv)
 
 ### load the "dismo" package, which has a bunch of helper functions for SDMs
 if (!require("dismo")) install.packages("dismo"); library(dismo)
+
+### geoR package - used for plotting variograms
+if (!require("geoR")) install.packages("geoR"); library(geoR)
 ```
 
 # Introduction
@@ -24,7 +27,7 @@ if (!require("dismo")) install.packages("dismo"); library(dismo)
 
 [The California thrasher](https://www.allaboutbirds.org/guide/California_Thrasher/overview) is a nonmigratory species of songbird commonly sighted in California chaparral (shrubland) ecosystems. The California thrasher is something of a famous bird in ecology and biogeography - Joseph Grinnell's 1917 paper, "[the niche-relationships of the California thrasher](https://www.jstor.org/stable/4072271?seq=1#metadata_info_tab_contents)," introduced the ecological niche concept to ecology. In the paper, Grinnell aimed to discern the processes that shaped the thrasher's notably limited geographic range, which extends from Northern Baja to Northern California.
 
-The "Grinnellian niche," now one of several niche "concepts," defines the niche as the habitat requirements and behaviors that allow species to survive and reproduce in a given habitat. This niche concept underlies the modern study of biogeography and the practice of correlative species distribution modeling, which uses statistical models and machine learning algorithms to approximate the underlying determinants of species geographic ranges.
+The "Grinnellian niche," now one of several niche "concepts," defines the niche as the habitat requirements and behaviors that allow species to survive and reproduce in a given habitat. This niche concept underlies much of the modern study of biogeography and the practice of correlative species distribution modeling, which uses statistical models and machine learning algorithms to approximate the underlying determinants of species geographic ranges.
 
 In this lab, we'll apply species distribution models to characterize the niche of the California thrasher ourselves - then, we'll take that niche model and project it forward in time using climate projections under two different emissions scenarios.
 
@@ -111,7 +114,7 @@ ssp585 <- read.csv("bioclim_2081-2100_ss585.csv")
 
 ## Fit competing models
 
-Now, let's fit multiple different models using combinations of your chosen BIOCLIM variables as predictors. In each model, you can have as few as 1 predictor or as many as 6. These will, of course, be Bernoulli GAMs. For example:
+Now, let's fit multiple different models using combinations of your chosen BIOCLIM variables as predictors. In each model, you can have as few as 1 predictor or as many as 6. These will, of course, be Bernoulli GAMs. For example, we can fit a model with 3 smooth functions of BIOCLIM variables (with k = 5 basis functions each) using:
 
 ```{r eval = FALSE}
 thrasher_gam <- gam(
@@ -121,7 +124,7 @@ thrasher_gam <- gam(
 )
 ```
 
-or:
+or, we can choose to make some of these predictors linear or polynomial (e.g. quadratic) terms:
 
 ```{r}
 ## Same predictors as above, but now we fit a quadratic effect of bio1 and a linear effect of bio3, and keep bio2 as a smooth term
@@ -135,7 +138,23 @@ thrasher_gam <- gam(
 Try at least 10 models. For each model, compute the AIC and record that AIC along with the model terms (somewhere else - you don't have to record it here). Typically, we would keep all models within 2AIC of each, and average across these models. Here though, just choose the model with the lowest AIC, or choose a model that makes the most sense to you from those within 2AIC of the "best" model's AIC. Provide the model code below:
 
 ```{r}
-## YOUR CODE HERE
+thrasher_gam <- gam(
+  ## YOUR CODE HERE
+)
+```
+
+**Note:** There are several criteria that one might use to choose a "best" model - these include likelihood-based measures (AIC, BIC), but also measures of out-of-sample prediction ("cross validation"), in which subsets of the data are withheld from the model, and then used to test the model's predictive accuracy on data which it was not fitted to. With SDMs, the spatial nature of the data makes it so that there are multiple ways we might perform cross-validation.
+
+**Question 3:** With this model in hand, use the `gam.check` function to check whether the estimated degrees of freedom in each term are appropriate (a low p-value indicates that you may want to increase the number of degrees of freedom for that smooth function). Does `gam.check` suggest that your degrees of freedom may be too low for some predictors? Do you think that doing so makes sense ecologically or not?
+
+> **Answer:**
+
+If you decided to increase k for any of these smooth terms, do so until the p-value for that term is non-significant. Provide the code for your final model below, if different from your previous one:
+
+```{r}
+thrasher_gam <- gam(
+  ## YOUR CODE HERE  
+)
 ```
 
 ## Present
@@ -143,10 +162,83 @@ Try at least 10 models. For each model, compute the AIC and record that AIC alon
 In your group presentation, you should cover the following things from this section:
 
 1.  The initial set of environmental predictors you chose, and why
-2.  The final model structure and code
+2.  Whether you decided to increase k for any of your smooth functions, and if so, which ones and why
+3.  The final model structure and code
 
-# 2 - Test Model Terms
+# 2 - Model Terms
+
+## Plotting terms
+
+The most straightforward way to characterize the niche, in terms of each of the predictors in the model, is for us to plot the fitted model smooth functions and interpret the plots.
+
+Let's do this for our chosen model. Use the `plot` function to plot the smooths from the fitted model. You may also want to use the argument `scale = 0` so that the plots are not constrained to have the same y-axis, and `shade = TRUE` to produce a shaded error band (just for aesthetics, really).
+
+```{r}
+## YOUR CODE HERE
+```
+
+One thing that makes these a little hard to understand is the scale - our model uses a logit link, so these are on the log-odds scale, but it would be much easier to interpret these on the probability (of occurrence) scale. We can back-transform these smooth curves to the probability scale by passing a transformation function to the `trans` argument. To do this, we first extract the inverse link function (which in this case is the "logistic" or "inverse logit") from the model object.
+
+```{r}
+linkinv <- thrasher_gam$family$linkinv
+```
+
+Now, plot the smooth functions on the transformed scale:
+
+```{r}
+## YOUR CODE HERE
+```
+
+**Question 4:** Interpret these plots - according to your model, what is the preferred habitat of the California thrasher?
+
+> **Answer:**
+
+There's one problem with this, however - this model is only additive on the link scale. Once we back transform the values, the shape of these smooth terms depends on the values of the other predictors in the model. Instead, we can create a **marginal effects plot** - we plot the effects of each variable, holding the values of the other predictors at some constant value (e.g., their mean). To do this:
+
+1.  Create a data frame with one column containing a range of values for our variable of interest (for example, `bio1`), and with columns for each of the other predictors, each of which is held at their mean.
+2.  Obtain model predictions and standard errors by using the `predict` function on this new data frame.
+3.  Back-transform the fitted values, and the fitted values +/- their standard errors to get the upper and lower bounds of our error bands.
+
+**Question 4:** Do this for one of the terms in your model. Interpret the results.
+
+> **Answer:**
+
+```{r}
+## YOUR CODE HERE
+```
+
+## Present
+
+In your group presentation, include 1 slide for each model term in your final model. Show the plot on the log-odds scale and the probability scale, and show the marginal effects plot for the variable you computed it for. Interpret the results for each variable.
 
 # 3 - Project current and future ranges
+
+## Plot distributions
+
+BIOCLIM variables across the state of California for 1970-2000 and for the two climate scenarios projected out to 2081-2100 are contained in the `bioclim`, `ssp245`, and `ssp585` data frames.
+
+Obtain fitted probability of occurrence values for each of these data frames:
+
+```{r}
+## YOUR CODE HERE
+```
+
+Plot the current (1970-2000) and projected distributions (under both scenarios) using `ggplot` and `geom_raster`. You might also use `scale_color_viridis_c` with `option = "magma"` - it's better looking and easier to read than the default ggplot color scheme.
+
+```{r}
+## YOUR CODE HERE - 1970-2000
+```
+
+```{r}
+## YOUR CODE HERE - 2081-2100, SSP 2 4.5
+```
+
+```{r}
+## YOUR CODE HERE - 2018-2100, SSP 5 8.5
+```
+
+## Present
+
+In your presentation, include 1 slide for each of the range plots above. Interpret the current range and projected range under both scenarios./
 
 # 4 - Derive range characteristics
