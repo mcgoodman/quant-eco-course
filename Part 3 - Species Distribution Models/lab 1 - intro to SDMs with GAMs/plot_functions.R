@@ -1,12 +1,21 @@
 
 ## Required Packages ----------------------------------------------------------
 
-packages <- c("tidyverse", "sp", "mapdata")
-for (i in seq_along(packages)) {
-  if(!do.call(require, list(package = packages[i]))) {
-    do.call(install.packages, list(pkgs = packages[i]))
-    do.call(require, list(package = packages[i]))
+cran <- "http://cran.us.r-project.org"
+
+### load the tidyverse packages
+if (!require("tidyverse")) install.packages("tidyverse", repos = cran); library(tidyverse)
+
+### mapdata package - for obtaining polygons of Alaska's coastline
+if (!require("mapdata")) install.packages("mapdata", repos = cran); library(mapdata)
+
+### Using a function from FishStatsUtils for reprojecting Alaskan polygon coordinates
+if (!require("FishStatsUtils")) {
+  if (!require("devtools")) {
+    install.packages("devtools", repos = cran); library(devtools)
   }
+  devtools::install_github("James-Thorson-NOAA/FishStatsUtils")
+  library(FishStatsUtils)
 }
 
 ### Functions to plot fitted values -------------------------------------------
