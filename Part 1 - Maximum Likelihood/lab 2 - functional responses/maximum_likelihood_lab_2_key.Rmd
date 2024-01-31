@@ -44,7 +44,7 @@ ReedfrogFuncresp %>%
 
 # The Holling Type II response
 
-There are many hypothesized forms of the functional response, but perhaps the most ubiquitous is the Holling Type II response, which models the decline in predation rate at high prey densities as arising from two parameters: the **attack rate** of the predator, and the **handling time**, which is how long it takes a predator to consume an individual prey item. At high prey densities, the handling time becomes limiting, and the predation rate declines: 
+There are many hypothesized forms of the functional response, but perhaps the most ubiquitous is the Holling Type II response, which models the decline in predation rate at high prey densities as arising from two parameters: the **attack rate** of the predator, and the **handling time**, which is how long it takes a predator to consume an individual prey item. At low prey densities, the attack rate controls how many prey a predator consumes, but as prey density increases, the handling time becomes limiting, and the predation rate approaches as asymptote:
 
 $$
 N_c =  P \times t \times \frac{a N_0}{1 + a h N_0}
@@ -70,25 +70,30 @@ $$
 \end{aligned}
 $$
 
-Here's a function for the negative log-likelihood under this model - take a minute to understand the code. The attack rate $a$ and the handling time $h$ can't be negative, so we'll just return a really high value for those that are. Also, we know the number of predators $P$ in each tank (3 dragonflies) and the amount of time $t$ for which predation is observed (14 days), so we'll pass these as separate arguments instead of including them in our `par` argument:
+Here's a function for the negative log-likelihood under this model - take a minute to understand the code. The attack rate $a$ and the handling time $h$ must be positive, so we'll optimize these parameters on the log scale. Also, we know the number of predators $P$ in each tank (3 dragonflies) and the amount of time $t$ for which predation is observed (14 days), so we'll pass these as separate arguments instead of including them in our `par` argument. 
+
+Note that our function for $p_c$ is actually only bounded on the lower end - it can't be lower than zero, but if we set the attack rate high enough it can produce a probability of consumption higher than one. As a workaround, we'll return a probability very close to 1 if the expected number of prey consumed exceeds the initial prey density):
 
 ```{r}
 ## Negative log likelihood
 nll_holling2 <- function(par, P, t, N0, Nc) {
   
-  a <- par[1] ## attack rate
-  h <- par[2] ## handling time
+  a <- exp(par["log_a"]) ## attack rate
+  h <- exp(par["log_h"]) ## handling time
   
-  if (a >= 0 & h >= 0) {
-    
-    p_sim = holling2(N0, a, h, P, t)/N0
-    return(-sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE)))
-  } else {
-    return(1e5) # return a large number for nonsensical parameter values
-  }
+  p_sim = pmin(holling2(N0, a, h, P, t)/N0, 0.999)
+  -sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE))
   
 }
 ```
+
+**Question:** Why can't we use a probability of exactly 1 as our ceiling? What other strategies could we try to bound the probability of consumption within (0, 1)? 
+
+> If the probability of consumption were estimated as exactly 1 for any of our data points, this would mean that if any prey were not consumed in that trial, the probability of that data point is zero. When we're obtaining the negative log likelihood, that would translate to $-log(0) = \infty$, so we wouldn't be able to evaluate the likelihood. We might try fitting a different function which is naturally bounded within (0,1), or we could try constrained optimization, or we could use a different transformation (like a sigmoid on some interval) to constrain the attack rate to a certain range.
+
+**Optional:** Come up with a function with a similar shape to the Holling Type II function, and with two parameters a and h which control the slope and asymptote, but which is constrained to the interval (0, 1) so long as a and h are positive:
+
+> The function $(1 - e^{-a N0})/(1 + h)$ satisfies this constraint for a, h > 0
 
 # Choosing initial values
 
@@ -99,18 +104,20 @@ Taking a look at the Hollling Type II equation, we can see that for small values
 Let's plot the number of prey eaten, divided by the number of predators $P$ and the study time $t$, as a function of the initial prey density: 
 
 ```{r}
-ReedfrogFuncresp$p_killed <- ReedfrogFuncresp$Killed / (3 * 14)
+ReedfrogFuncresp$killed_norm <- ReedfrogFuncresp$Killed / (3 * 14)
 
 ReedfrogFuncresp %>% 
-  ggplot(aes(Initial, p_killed)) + 
-  geom_point()
+  ggplot(aes(Initial, killed_norm)) + geom_point() + 
+  labs(x = "initial prey count", y = expression("prey killed ("~predator^{-1}~day^{-1}~")"))
 ```
 
-The asymptote looks to be around 0.85, and we can guess $a$ by fitting a linear regression on smaller values of the initial population size, holding the intercept at 0 (since predators can't consume prey that aren't there):
+The number of prey killed doesn't seem to have reached an asymptote at an initial prey density of 100, which makes it a little difficult to guess an initial value here - but I'd go with an asymptote of maybe 1.2, so we'll use an initial value of $h = 1/1.2 = 0.83$).
+
+Since $a$ controls the slope at low predator densities, we can make a better guess for $a$ by fitting a linear regression on smaller values of the initial population size, holding the intercept at 0 (since predators can't consume prey that aren't there):
 
 ```{r}
 initial_lm <- lm(
-  p_killed ~ 0 + Initial, 
+  killed_norm ~ 0 + Initial, 
   data = ReedfrogFuncresp %>% filter(Initial < 20)
 )
 
@@ -120,9 +127,10 @@ coef(initial_lm)
 # Maximum likelihood estimates
 
 So, our rough initial values are $a = 0.014$ and $h = 0.85$. Let's pass these to `optim`, along with our `nll_holling2` function and our data, to obtain maximum-likelihood estimates for the attack rate and handling time: 
+
 ```{r}
 holling_mle <- optim(
-  par = c(a = 0.014, h = 0.85), 
+  par = c(log_a = log(0.014), log_h = log(0.85)), 
   fn = nll_holling2, 
   N0 = ReedfrogFuncresp$Initial, 
   Nc = ReedfrogFuncresp$Killed, 
@@ -131,7 +139,8 @@ holling_mle <- optim(
   hessian = TRUE
 )
 
-holling_mle
+# Back-transform estimates
+setNames(exp(holling_mle$par), c("a", "h"))
 ```
 
 Let's superimpose the fitted curve on top of our data:
@@ -139,7 +148,7 @@ Let's superimpose the fitted curve on top of our data:
 ```{r}
 ## obtain fitted values
 fitted <- data.frame(initial = seq(0, 100, 0.1)) ## initial prey density
-fitted$holling2 <- holling2(fitted$initial, holling_mle$par[1], holling_mle$par[2], P = 3, t = 14)
+fitted$holling2 <- holling2(fitted$initial, exp(holling_mle$par[1]), exp(holling_mle$par[2]), P = 3, t = 14)
 
 ReedfrogFuncresp %>% 
   ggplot(aes(Initial, Killed)) + 
@@ -149,7 +158,7 @@ ReedfrogFuncresp %>%
 ```
 
 
-We can obtain standard errors for the attack rate and handling time with Fisher information:
+We can obtain standard errors for the (log) attack rate and handling time with Fisher information:
 
 ```{r}
 var_cov <- solve(holling_mle$hessian)
@@ -159,17 +168,17 @@ se
 
 # Likelihood Surface
 
-We only have two parameters in this model, so let's visualize the dependency of our likelihood function on the parameters as a **surface**. Fill in the for loop below so that each combination of parameters has a corresponding negative log-likelihood value:
+We only have two parameters in this model, so let's visualize the dependency of our likelihood function on the parameters as a **surface**. Fill in the for loop below so that each combination of parameters has a corresponding negative log-likelihood value, and plot the likelihood surface with the parameters / axes on the log scale:
 
 ```{r }
 a_seq <- seq(0.002, 0.02, length.out = 100)
 h_seq <- seq(0.05, 2, length.out = 100)
 
-par_grid <- expand.grid(a = a_seq, h = h_seq)
+par_grid <- expand.grid(log_a = log(a_seq), log_h = log(h_seq))
 
 for (i in 1:nrow(par_grid)) {
   par_grid$nll[i] <- nll_holling2(
-    par = as.numeric(par_grid[i,]), 
+    par = unlist(par_grid[i,1:2]), 
     N0 = ReedfrogFuncresp$Initial, 
     Nc = ReedfrogFuncresp$Killed, 
     P = 3, 
@@ -178,64 +187,56 @@ for (i in 1:nrow(par_grid)) {
 }
 
 par_grid %>% 
-  ggplot(aes(a, h, z = nll)) + 
+  ggplot(aes(log_a, log_h, z = nll)) + 
   geom_contour_filled() + 
   geom_point(aes(x = holling_mle$par[1], y = holling_mle$par[2]), color = "white")
 ```
 
-Based on the shape of the likelihood surface, do you think a normal approximation for the confidence intervals on $a$ and $h$ would be appropriate? Why or why not?
+**Question:** Based on the shape of the likelihood surface, do you think a normal approximation for the confidence intervals on $a$ and $h$ would be appropriate? Why or why not?
 
 > **If a normal approximation were appropriate for both of these paramters, we'd expect the likelihood contours to form ellipses around the maximum likelihood estimate. Because this likelihood surface is more complex than that, it's clear that the likelihood does not drop off symmetrically around the maximum likelihood estimate, which suggests the distribution of the maximum likelihood estimate may not be symmetric either. By plotting the likelihood profiles, we can see that in fact the likelihood is symmetric around the handling time parameter, but is very much not symmetric around the attack rate parameter. Judging from the likelihood surface and profiles, it seems unlikely that a normal approximation would work well. It's also worth noting that the likelihood changes much more quickly as we vary the attack rate than as we vary the handling time - which mirrors the fact that the standard error for the handling time is much larger than the standard error for the attack rate.**
 
 ```{r fig.width = 7, echo = FALSE}
-holling_proflik_h <- function(a, P, t, N0, Nc, h) {
-  if (a >= 0 & h >= 0) {
-    p_sim = holling2(N0, a, h, P, t)/N0
-    return(-sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE)))
-  } else {
-    return(1e5)
-  }
+holling_proflik_h <- function(log_a, P, t, N0, Nc, log_h) {
+  p_sim = pmin(holling2(N0, exp(log_a), exp(log_h), P, t)/N0, 0.999)
+  -sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE))
 }
 
-holling_proflik_a <- function(a, P, t, N0, Nc, h) {
-  if (a >= 0 & h >= 0) {
-    p_sim = holling2(N0, a, h, P, t)/N0
-    return(-sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE)))
-  } else {
-    return(1e5)
-  }
+holling_proflik_a <- function(log_h, P, t, N0, Nc,log_a) {
+    p_sim = pmin(holling2(N0, exp(log_a), exp(log_h), P, t)/N0, 0.999)
+    -sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE))
 }
 
-h_seq <- seq(0.2, 1.2, by = 0.01)
+h_seq <- log(seq(0.2, 1.5, by = 0.01))
 h_nll <- rep(NA, length(h_seq))
 
 for (i in 1:length(h_seq)) {
   h_fit <- optim(
-    par = holling_mle$par[1], 
+    par = holling_mle$par["log_a"], 
     fn = holling_proflik_h, 
     N0 = ReedfrogFuncresp$Initial, 
     Nc = ReedfrogFuncresp$Killed, 
-    h = h_seq[i], P = 3, t = 14
+    log_h = h_seq[i], P = 3, t = 14
   )
   h_nll[i] <- h_fit$value
 }
 
-a_seq <- seq(0.001, 0.025, by = 0.0001)
+a_seq <- log(seq(0.001, 0.05, by = 0.0001))
 a_nll <- rep(NA, length(a_seq))
 
 for (i in 1:length(a_seq)) {
   a_fit <- optim(
-    par = holling_mle$par[2], 
+    par = holling_mle$par["log_h"], 
     fn = holling_proflik_a, 
     N0 = ReedfrogFuncresp$Initial, 
     Nc = ReedfrogFuncresp$Killed, 
-    a = a_seq[i], P = 3, t = 14
+    log_a = a_seq[i], P = 3, t = 14
   )
   a_nll[i] <- a_fit$value
 }
 
 nll_profiles <- data.frame(
-  parameter = c(rep("a", length(a_nll)), rep("h", length(h_nll))), 
+  parameter = c(rep("log(a)", length(a_nll)), rep("log(h)", length(h_nll))), 
   value = c(a_seq, h_seq), 
   nll = c(a_nll, h_nll)
 )
@@ -281,23 +282,23 @@ for (i in 1:n_boot) {
 }
 ```
 
-Plot histograms of these samples. The attack rate samples are in the first column, and the handling time samples are in the second. What do you notice about the distributions of each of these parameters?
+**Question:** Plot histograms of these samples. The attack rate samples are in the first column, and the handling time samples are in the second. What do you notice about the distributions of each of these parameters?
 
 > **Surprisingly, the bootstrap distribution for the attack rate appears fairly symmetric (and quite narrow), while the bootstrap distribution for the handling time is fairly skewed. Judging from the bootstrap distributions alone, I'd be more inclined to trust the normal approximation for the attack rate than for the handling time.**
 
 ```{r}
-qplot(holling_boot[,1], binwidth = 0.0005) + xlab("attack rate")
-qplot(holling_boot[,2], binwidth = 0.1) + xlab("handling time")
+qplot(holling_boot[,1], binwidth = 0.0005) + xlab("log attack rate")
+qplot(holling_boot[,2], binwidth = 0.1) + xlab("log handling time")
 ```
 
-Obtain 95% confidence intervals using (1) the bootstrap distribution, and (2) the MLE and Fisher standard errors. How do these compare?
+**Question:** Obtain 95% confidence intervals using (1) the bootstrap distribution, and (2) the MLE and Fisher standard errors. Back-transform these intervals so that the attack rate and handling time are interpretable. How do these compare?
 
-> **The bootstrap confidence interval for the attack rate agrees pretty closely with the nromal approximation using fisher information, but the handling time confidence interval differs dramatically between the two methods - the bootstrap method produces a wider confidence interval, and that interval is not symmetric around the mean of $\hat{h} \approx 0.7$.**
+> **The bootstrap confidence interval for the attack rate agrees pretty closely with the normal approximation using Fisher information, but the handling time confidence interval differs dramatically between the two methods - the bootstrap method produces a wider confidence interval.*
 
 ```{r}
 boot_CI <- list(
-  a = quantile(holling_boot[,1], c(0.025, 0.975)), 
-  h = quantile(holling_boot[,2], c(0.025, 0.975))
+  a = exp(quantile(holling_boot[,1], c(0.025, 0.975))), 
+  h = exp(quantile(holling_boot[,2], c(0.025, 0.975)))
 )
 
 boot_CI
@@ -305,8 +306,8 @@ boot_CI
 
 ```{r}
 fisher_CI <- list(
-  a = qnorm(c(0.025, 0.975), mean = holling_mle$par[1], sd = se[1]), 
-  b = qnorm(c(0.025, 0.975), mean = holling_mle$par[2], sd = se[2])
+  a = exp(qnorm(c(0.025, 0.975), mean = holling_mle$par[1], sd = se[1])), 
+  b = exp(qnorm(c(0.025, 0.975), mean = holling_mle$par[2], sd = se[2]))
 )
 
 fisher_CI
@@ -320,7 +321,7 @@ sample_fits <- vector("list", n_boot)
 for (i in 1:n_boot) {
   sample_fits[[i]] <- data.frame(
     initial = 0:100, 
-    killed = holling2(0:100, a = holling_boot[i,1], h = holling_boot[i,2], P = 3, t = 14)
+    killed = holling2(0:100, a = exp(holling_boot[i,1]), h = exp(holling_boot[i,2]), P = 3, t = 14)
   )
 }
 
@@ -361,13 +362,9 @@ Use a likelihood ratio test to assess the null hypothesis that the handling time
 > **To do this, I modified the negative log likelihood function so that the handling time was a separate argument, so that the attack rate is the only parameter passed as the first argument (I renamed the first argument to "a" to make this clear). `optim` will only optimize the parameters passed as the first argument, which means it will only optimize `a`, so we can use this function to hold `h` constant and obtain the value of the negative log-likelihood at the restricted maximum likelihood estimate for `a`. This is the negative log likelihood for our reduced model, and we already have the negative log likelihood for the full model (stored in the `holling_mle` variable we created earlier). With these two things, we can compute the likelihood ratio test statistic and a p-value. The p-value I got is 0.15, which means that our maximum likelihood estimate of $\hat{h} \approx 0.7$ is not significantly different from a handling time of 1. This is consistent with the fact that our confidence interval for the handling time $h$ includes 1, regardless of the method we use to calculate it.**
 
 ```{r}
-holling_proflik_h <- function(a, P, t, N0, Nc, h) {
-  if (a >= 0 & h >= 0) {
-    p_sim = holling2(N0, a, h, P, t)/N0
-    return(-sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE)))
-  } else {
-    return(1e5)
-  }
+holling_proflik_h <- function(log_a, P, t, N0, Nc, log_h) {
+  p_sim = pmin(holling2(N0, exp(log_a), exp(log_h), P, t)/N0, 0.999)
+  -sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE))
 }
 
 reduced_model <- optim(
@@ -375,7 +372,7 @@ reduced_model <- optim(
   fn = holling_proflik_h, 
   N0 = ReedfrogFuncresp$Initial, 
   Nc = ReedfrogFuncresp$Killed, 
-  h = 1, P = 3, t = 14
+  log_h = log(1), P = 3, t = 14
 )
 
 full_nll <- holling_mle$value
@@ -411,14 +408,9 @@ rogers <- function(N0, a, h, P, t) {
 
 nll_rogers <- function(par, P, t, N0, Nc) {
   
-  a <- par[1]; h <- par[2]
-  
-  if (a >= 0 & h >= 0 ) {
-    p_sim = rogers(N0, a, h, P, t)/N0
-    return(-sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE)))
-  } else {
-    return(1e5)
-  }
+  a <- exp(par["log_a"]); h <- exp(par["log_h"])
+  p_sim = pmin(rogers(N0, a, h, P, t)/N0, 0.999)
+  -sum(dbinom(Nc, prob = p_sim, size = N0, log = TRUE))
   
 }
 ```
