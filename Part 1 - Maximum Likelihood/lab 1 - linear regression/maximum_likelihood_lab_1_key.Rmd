@@ -1,6 +1,6 @@
 ---
 title: 'Lab: Linear Regression by Maximum Likelihood'
-author: "< your name here >"
+author: "answer key"
 date: "BIOHOPK 143H - Winter 2021"
 output: pdf_document
 ---
@@ -11,6 +11,10 @@ if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
 
 knitr::opts_chunk$set(fig.height = 4, fig.width = 6)
 ```
+
+# Learning Goal
+
+In this lab, we'll step through the process of fitting a linear regression model from scratch - by using a simple model as an example, we'll learn the basics of maximum likelihood estimation so that we can apply the approach to more complex models down the line. Everything we'll do in this lab can be done in a single line using the R function `lm`, but by peeking inside the black box, we can learn how to extend the approach when pre-packaged options aren't available.
 
 # Simulating and plotting data
 
@@ -53,7 +57,7 @@ n <- 50 ## sample size
 
 ## simulate data
 sim_data <- data.frame(x = runif(n, min = -3, max = 3))
-sim_data$y <- a + b*sim_data$x + rnorm(n, mean = 0, sd = sigma)
+sim_data$y <- rnorm(n, mean = a + b*sim_data$x, sd = sigma)
 
 ## Look at the data structure
 head(sim_data)
@@ -105,22 +109,20 @@ $$
 
 So, given our parameters $\alpha$, $\beta$, and $\sigma$, the likelihood of our y-values is given by summing the log density of each of our y-values under a Normal distribution with mean $\alpha + \beta X$ and standard deviation $\sigma$.
 
-Luckily, the Normal density function is already coded into `R` as the `dnorm` function, so we'll write a function for the negative log-likelihood using that. We can express the log-likelihood function very simply in R as:
+Luckily, the Normal density function is already coded into `R` as the `dnorm` function, so we'll write a function for the negative log-likelihood using that. We can express the negative log-likelihood function very simply in R as:
 
-    -sum(dnorm(y, mean = ..., sd = ..., log = TRUE))
+```         
+-sum(dnorm(y, mean = ..., sd = ..., log = TRUE))
+```
 
-Where we'll provide `a + b*x` for the `mean`, and `sigma` for the `sd`. Since the standard deviation, $\sigma$, can't be negative, we'll return a very high value for any negative values of sigma:
+Where we'll provide `a + b*x` for the `mean`, and `sigma` for the `sd`. Since the standard deviation, $\sigma$, must be positive, we'll estimate it on the log scale. The `optim` function expects all of our parameters to be passed to our objective function (i.e., the negative log likelihood) as a single argument, so we'll pass them as a vector argument called `par` and unpack them in the likelihood function:
 
 ```{r lm_log_lik}
 ## negative log-likelihood of y-values given intercept, slope, and error sd
 ## we pass the parameters as a vector in the order a, b, sigma
-lm_log_lik <- function(pars, x, y) {
-  a <- pars[1]; b <- pars[2]; sigma <- pars[3]
-  if (sigma > 0) {
-    return(-sum(dnorm(y, mean = a + b*x, sd = sigma, log = TRUE)))
-  } else {
-    return(1000)
-  }
+lm_log_lik <- function(par, x, y) {
+  a <- par["a"]; b <- par["b"]; sigma <- exp(par["log_sigma"])
+  -sum(dnorm(y, mean = a + b*x, sd = sigma, log = TRUE))
 }
 ```
 
@@ -128,7 +130,7 @@ Now, let's pass the `lm_log_lik` function to the `optim` function to get out a l
 
 ```{r MLE}
 fit <- optim(
-  par = c(a = 0, b = 0, sigma = 1), 
+  par = c(a = 0, b = 0, log_sigma = 1), 
   fn = lm_log_lik, 
   x = sim_data$x, 
   y = sim_data$y, 
@@ -152,8 +154,8 @@ Let's compare our estimates with the known values of the intercept and slope by 
 sim_data %>%   
   ggplot(aes(x, y)) + # tell ggplot which aesthetics to use
   geom_point() + # add points
-  geom_abline(intercept = a, slope = b, color = "red") + # show the known regression line
-  geom_abline(intercept = fit$par[1], slope = fit$par[2], color = "blue") # our estimates
+  geom_abline(intercept = a, slope = b, color = "red") + # true regression line
+  geom_abline(intercept = fit$par[1], slope = fit$par[2], color = "blue") # fit
 ```
 
 # Likelihood surfaces and profiles
@@ -172,7 +174,7 @@ par_grid <- expand.grid("a" = a_seq, "b" = b_seq)
 ### loop over data frame, store negative log likelihood
 for (i in 1:nrow(par_grid)) {
   par_grid$loglik[i] <- lm_log_lik(
-    c(a = par_grid$a[i], b = par_grid$b[i], sigma = fit$par[3]), 
+    c(a = par_grid$a[i], b = par_grid$b[i], fit$par[3]), 
     x = sim_data$x, 
     y = sim_data$y
   )
@@ -298,7 +300,7 @@ for (i in 1:n_samples) {
   new_data <- sim_data[sample_rows,] # subset data to sampled rows
   
   sample_fit <- optim(
-    par = c(0, 0, 1), # initial values
+    par = c(a = 0, b = 0, log_sigma = 0), # initial values
     fn = lm_log_lik, # log likelihood function
     x = new_data$x, # sampled x-values
     y = new_data$y # sampled y-values
@@ -327,7 +329,7 @@ Where $\phi^{-1}$ is the inverse cumulative distribution function of the standar
 
 $$
 \text{CI} = (\phi^{-1}_{\hat{\theta}, \text{SE}(\theta)}(\gamma / 2), \; \phi^{-1}_{\hat{\theta}, \text{SE}(\theta)} (1-\gamma/2))
-$$ Where $\phi^{-1}_{\hat{\theta}, \text{SE}(\theta)}$ is the inverse cumulative distribution function for a Normal distribution with mean $\hat{\theta}$ and standard deviation $\text{SE}(\theta)$
+$$ Where $\phi^{-1}_{\hat{\theta}, \text{SE}(\theta)}$ is the inverse cumulative distribution function for a Normal distribution with mean $\hat{\theta}$ and standard deviation $\text{SE}(\theta)$.
 
 The Normal inverse CDF is returned by the `qnorm` function. We can obtain a confidence interval for our intercept $\alpha$ and slope $\beta$:
 
@@ -369,7 +371,7 @@ You'll also find that building things into functions makes them easier to read a
 Here's the code for the function - there aren't really any new elements here, we've just taken the old elements and put them together.
 
 ```{r lm_function}
-lm_fit <- function(x, y, SE = "fisher", init = c("a" = 0, "b" = 0, "sigma" = 1), n_boot = 1000) {
+lm_fit <- function(x, y, SE = "fisher", init = c("a" = 0, "b" = 0, "log_sigma" = 0), n_boot = 1000) {
 
   if (!(SE %in% c("bootstrap", "fisher"))) stop("SE options are bootstrap or fisher")
   if (length(x) != length(y)) stop("x and y lengths differ")
@@ -429,6 +431,8 @@ Now, play around with simulating new data - can you recover the parameters that 
 
 The code to simulate new data is reproduced for you below. Try varying the sample size and the parameters - and make sure to plot the x and y variables against each other first!
 
+> **As we increase the sample size, the estimates do not change in any predictable way, but the variation in estimates across simulations does decrease - estimates are, on average, closer to the true value when we've simulated many observations. The standard error decreases as we increase the sample size - with more data, we are more certain about our maximum likelihood estimates.**
+
 ```{r}
 a <- 1 ## intercept
 b <- 2 ## slope
@@ -438,7 +442,7 @@ n <- 50 ## sample size
 ## simulate data
 sim_data <- tibble(
   x = runif(n, min = -3, max = 3), ## x values
-  y = a + b*x + rnorm(n, mean = 0, sd = sigma) ## regression equation
+  y = rnorm(n, mean = a + b*x, sd = sigma) ## regression equation
 )
 
 ## plot data
@@ -452,8 +456,12 @@ lm_fit(sim_data$x, sim_data$y, SE = "fisher")
 
 Try out our regression function on some of the other datasets built into R - try, for example, building regressions using the variables in the `mtcars` or `iris` datasets. You can view all the datasets you have available by running the `data()` function.
 
+```{r message = FALSE}
+mtcars %>% ggplot(aes(hp, mpg)) + geom_point() + geom_smooth(method = "lm")
+```
+
 ```{r}
-## YOUR CODE HERE
+with(mtcars, lm_fit(hp, mpg))
 ```
 
 ## 3. Likelihood-ratio tests
@@ -474,19 +482,28 @@ We won't go into the theoretical/mathematical justification for the likelihood r
 
 Do this below and calculate a p-value for the null hypothesis that the slope is 0 (representing no relationship between y and x) using the `anscombe$x1` and `anscombe$y1` variables. Compare the p-value you get here from the one the `lm` function returns. If you use the `slope_proflik` function we defined earlier in obtaining your reduced negative log-likelihood, explain why this works (but this isn't the only way!).
 
+> **Here, I used the `slope_proflik` function we defined earlier for creating a likelihood profile to obtain the negative log-likelihood for the "reduced" model - this works because this function does exactly what we outlined in step 2 of the likelihood ratio test procedure - it fits the model, holding a paramter (the slope) constant. The likelihood ratio test p-value is extremely small, so there's significant evidence (under a threshold significance level of** $\alpha = 0.05$) that the slope of the relationship between `x1` and `y1` in the `anscombe` dataset is different than zero. While the p-value that `lm` returns is a little higher, both are quite small.
+
 ```{r}
 ### full negative log-likelihood
-full <- optim(par = c(0, 0, 1), fn = lm_log_lik, x = anscombe$x1, y = anscombe$y1)
+full <- optim(par = c(a = 0, b = 0, log_sigma = 0), fn = lm_log_lik, x = anscombe$x1, y = anscombe$y1)
 full <- full$value
 
 ### reduced negative log-likelihood
-## YOUR CODE HERE
+reduced <- optim(par = c(a = 0, log_sigma = 0), fn = slope_proflik, b = 0, x = anscombe$x1, y = anscombe$y1)
+reduced <- reduced$value
 
 ### calculate test statistic
-## YOUR CODE HERE
+chisq <- 2 * (reduced - full)
 
-### p-value
-## YOUR CODE HERE
+### likelihood ratio test p-value
+p_LRT <- pchisq(chisq, df = 1, lower.tail = FALSE)
+
+### p-value from lm
+p_lm <- anova(lm(y1 ~ x1, data = anscombe))$`Pr(>F)`[1]
+  
+paste("likelihood ratio p-value:", round(p_LRT, 4))
+paste("lm p-value:", round(p_lm, 4))
 ```
 
 ## 4. Non-parametric estimation
@@ -501,13 +518,15 @@ $$
 
 In the case of linear regression, $f(x_i) = \alpha + \beta x_i$. Modify the `lm_log_lik` function we wrote earlier to return the sum of squares for a given intercept and slope, and find the values of the intercept and slope that minimize it (the "**least squares**" estimate). Compare these to the estimates obtained by maximum likelihood - what do you notice?
 
+> **The least squares estimate is nearly identical to the maximum likelihood estimate. In general, this will not be the case, *except* when we use a normal likelihood function - it turns out that if we assume a normal distribution for the response, maximum likelihood and least squares will provide the same parameter estimates.**
+
 ```{r}
 ### WRITE THE SUM OF SQUARES FUNCTION -------------------------------------
 ## sum of squared errors given intercept and slope
 ## pass the parameters as a vector c(a, b)
 sum_sqrs <- function(pars, x, y) {
   a <- pars[1]; b <- pars[2]
-  ## YOUR CODE HERE
+  sum((y - (a + b * x))^2)
 }
 
 ### SIMULATE DATA ---------------------------------------------------------
@@ -520,7 +539,7 @@ n <- 50 ## sample size
 ## simulate data
 sim_data <- tibble(
   x = runif(n, min = -3, max = 3), ## x values
-  y = a + b*x + rnorm(n, mean = 0, sd = sigma) ## regression equation
+  y = rnorm(n, mean = a + b*x, sd = sigma) ## regression equation
 )
 
 ### OBTAIN PARAMETER ESTIMATES USING SUM OF SQUARES -----------------------
@@ -537,7 +556,7 @@ ss_fit
 ```{r}
 ### OBTAIN PARAMETER ESTIMATES USING MAXIMUM LIKELIHOOD -------------------
 ml_fit <- optim(
-  par = c(0, 0, 1), # initial values (a, b, sigma)
+  par = c(a = 0, b = 0, log_sigma = 0), # initial values (a, b, sigma)
   fn = lm_log_lik,  # negative log-likelihood function
   x = sim_data$x,   # x values
   y = sim_data$y   # y values
