@@ -5,7 +5,7 @@ date: "BIOHOPK 143H - Winter 2021"
 output: pdf_document
 ---
 
-```{r setup}
+```{r setup, include = FALSE}
 ## load the tidyverse packages
 if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
 
@@ -429,7 +429,7 @@ lm_fit <- function(x, y, SE = "fisher", init = c("a" = 0, "b" = 0, "log_sigma" =
 
 ## 1. Testing our function with new parameters
 
-Now, play around with simulating new data - can you recover the parameters that you simulated the data from? What happens to the estimates and their SE when you decrease the sample size of the simulated data? Do the Fisher information and bootstrap methods agree on small datasets? On large ones?
+Now, play around with simulating new data - can you recover the parameters that you simulated the data from? What happens to the estimates and their SE when you decrease the sample size of the simulated data? Do the Fisher information and bootstrap methods agree on small datasets? On large ones? **1 pt.**
 
 The code to simulate new data is reproduced for you below. Try varying the sample size and the parameters - and make sure to plot the x and y variables against each other first!
 
@@ -454,7 +454,7 @@ lm_fit(sim_data$x, sim_data$y, SE = "fisher")
 
 ## 2. Trying it out on new data
 
-Try out our regression function on some of the other datasets built into R - try, for example, building regressions using the variables in the `mtcars` or `iris` datasets. You can view all the datasets you have available by running the `data()` function.
+Try out our regression function on some of the other datasets built into R - try, for example, building regressions using the variables in the `mtcars` or `iris` datasets. You can view all the datasets you have available by running the `data()` function. **1 pt.**
 
 ```{r}
 ## YOUR CODE HERE
@@ -462,7 +462,7 @@ Try out our regression function on some of the other datasets built into R - try
 
 ## 3. Likelihood-ratio tests
 
-While our linear regresion function is great, you've probably noticed a couple things that it's missing which R's `lm` function has - notably, our function doesn't spit out any p-values. The p-values that the `lm` function returns for the intercept and slope are testing the null hypothesis that intercept and slope are 0 - we can test the same null hypothesis, and many other ones that we might be interested in, using the likelihood function.
+While our linear regression function is great, you've probably noticed a couple things that it's missing which R's `lm` function has - notably, our function doesn't spit out any p-values. The p-values that the `lm` function returns for the intercept and slope are testing the null hypothesis that intercept and slope are 0 - we can test the same null hypothesis, and many other ones that we might be interested in, using the likelihood function.
 
 Although the `lm` function uses the t distribution to calculate p-values, we're going to use **likelihood-ratio tests**. Likelihood ratio tests are great because we can use them to test a flexible variety of null hypothesis - maybe our null expectation for the slope is 2, or maybe we want to test the joint null hypothesis that **both** the intercept and slope are zero. Maybe we're fitting a logistic population growth model, and we want to test whether the intrinsic growth rate $r$ is significantly different from 0.05 or some other hypothesized value - all of these are things we can evaluate with a likelihood ratio test.
 
@@ -476,7 +476,7 @@ We won't go into the theoretical/mathematical justification for the likelihood r
 
 4.  Calculate the probability of observing a test statistic as or more extreme than the above value assuming a Chi-square distribution with degrees of freedom equal to the number of fixed parameters (in R, this is the `pchisq` function with the argument `lower.tail = FALSE`).
 
-Do this below and calculate a p-value for the null hypothesis that the slope is 0 (representing no relationship between y and x) using the `anscombe$x1` and `anscombe$y1` variables. Compare the p-value you get here from the one the `lm` function returns. If you use the `slope_proflik` function we defined earlier in obtaining your reduced negative log-likelihood, explain why this works (but this isn't the only way!).
+Do this below and calculate a p-value for the null hypothesis that the slope is 0 (representing no relationship between y and x) using the `anscombe$x1` and `anscombe$y1` variables. Compare the p-value you get here from the one the `lm` function returns. If you use the `slope_proflik` function we defined earlier in obtaining your reduced negative log-likelihood, explain why this works (but this isn't the only way!). **2 pts.**
 
 ```{r}
 ### full negative log-likelihood
@@ -503,7 +503,7 @@ $$
 \text{SS} = \sum_{i = 1}^n (y_i - f(x_i))^2
 $$
 
-In the case of linear regression, $f(x_i) = \alpha + \beta x_i$. Modify the `lm_log_lik` function we wrote earlier to return the sum of squares for a given intercept and slope, and find the values of the intercept and slope that minimize it (the "**least squares**" estimate). Compare these to the estimates obtained by maximum likelihood - what do you notice?
+In the case of linear regression, $f(x_i) = \alpha + \beta x_i$. Modify the `lm_log_lik` function we wrote earlier to return the sum of squares for a given intercept and slope, and find the values of the intercept and slope that minimize it (the "**least squares**" estimate). Compare these to the estimates obtained by maximum likelihood - what do you notice? **1 pt.**
 
 ```{r}
 ### WRITE THE SUM OF SQUARES FUNCTION -------------------------------------

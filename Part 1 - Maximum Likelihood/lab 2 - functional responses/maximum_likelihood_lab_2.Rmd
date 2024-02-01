@@ -45,7 +45,7 @@ ReedfrogFuncresp %>%
 
 # The Holling Type II response
 
-There are many hypothesized forms of the functional response, but perhaps the most ubiquitous is the Holling Type II response, which models the decline in predation rate at high prey densities as arising from two parameters: the **attack rate** of the predator, and the **handling time**, which is how long it takes a predator to consume an individual prey item. At high prey densities, the handling time becomes limiting, and the predation rate declines: 
+There are many hypothesized forms of the functional response, but perhaps the most ubiquitous is the Holling Type II response, which models the decline in predation rate at high prey densities as arising from two parameters: the **attack rate** of the predator, and the **handling time**, which is how long it takes a predator to consume an individual prey item. At low prey densities, the attack rate controls how many prey a predator consumes, but as prey density increases, the handling time becomes limiting, and the predation rate approaches as asymptote:
 
 $$
 N_c =  P \times t \times \frac{a N_0}{1 + a h N_0}
@@ -95,7 +95,7 @@ nll_holling2 <- function(par, P, t, N0, Nc) {
 
 When we ran a linear regression on Monday, we didn't pay much attention to the initial parameter values that we passed to `optim`. However, for more complex functions, they can matter quite a bit - if the initial values are too off the mark, the optimization algorithm may never find the maximum likelihood estimates. So, let's try to make a visual guess as to what the initial values should be.
 
-Taking a look at the Hollling Type II equation, we can see that for small values of $N_0$ (the initial prey density), the number of prey eaten *per predator, and per unit time* (i.e. ignoring the $P$ and $t$ parameters) is close to $a$ (the attack rate) and as $N_0$ increases, the number of prey eaten by each predator reaches an assymptote of $h$.
+Taking a look at the Hollling Type II equation, we can see that for small values of $N_0$ (the initial prey density), the number of prey eaten *per predator, and per unit time* (i.e. ignoring the $P$ and $t$ parameters) is close to $a$ (the attack rate) and as $N_0$ increases, the number of prey eaten by each predator reaches an asymptote of $1/h$.
 
 Let's plot the number of prey eaten, divided by the numer of predators $P$ and the study time $t$, as a function of the intial prey density: 
 
@@ -166,14 +166,14 @@ We only have two parameters in this model, so let's visualize the dependency of 
 a_seq <- seq(0.002, 0.02, length.out = 100)
 h_seq <- seq(0.05, 2, length.out = 100)
 
-par_grid <- expand.grid(a = a_seq, h = h_seq)
+par_grid <- expand.grid(log_a = log(a_seq), log_h = log(h_seq))
 
 for (i in 1:nrow(par_grid)) {
   par_grid$nll[i] <- ## YOUR CODE HERE
 }
 
 par_grid %>% 
-  ggplot(aes(a, h, z = nll)) + 
+  ggplot(aes(log_a, log_h, z = nll)) + 
   geom_contour_filled() + 
   geom_point(aes(x = holling_mle$par[1], y = holling_mle$par[2]), color = "white")
 ```

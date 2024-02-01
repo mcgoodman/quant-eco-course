@@ -87,13 +87,9 @@ nll_holling2 <- function(par, P, t, N0, Nc) {
 }
 ```
 
-**Question:** Why can't we use a probability of exactly 1 as our ceiling? What other strategies could we try to bound the probability of consumption within (0, 1)? 
+**Question:** Why can't we use a probability of exactly 1 as our ceiling? What other strategies could we try to bound the probability of consumption within (0, 1)? **1pt**
 
 > If the probability of consumption were estimated as exactly 1 for any of our data points, this would mean that if any prey were not consumed in that trial, the probability of that data point is zero. When we're obtaining the negative log likelihood, that would translate to $-log(0) = \infty$, so we wouldn't be able to evaluate the likelihood. We might try fitting a different function which is naturally bounded within (0,1), or we could try constrained optimization, or we could use a different transformation (like a sigmoid on some interval) to constrain the attack rate to a certain range.
-
-**Optional:** Come up with a function with a similar shape to the Holling Type II function, and with two parameters a and h which control the slope and asymptote, but which is constrained to the interval (0, 1) so long as a and h are positive:
-
-> The function $(1 - e^{-a N0})/(1 + h)$ satisfies this constraint for a, h > 0
 
 # Choosing initial values
 
@@ -192,7 +188,7 @@ par_grid %>%
   geom_point(aes(x = holling_mle$par[1], y = holling_mle$par[2]), color = "white")
 ```
 
-**Question:** Based on the shape of the likelihood surface, do you think a normal approximation for the confidence intervals on $a$ and $h$ would be appropriate? Why or why not?
+**Question:** Based on the shape of the likelihood surface, do you think a normal approximation for the confidence intervals on $a$ and $h$ would be appropriate? Why or why not? **1pt.**
 
 > **If a normal approximation were appropriate for both of these paramters, we'd expect the likelihood contours to form ellipses around the maximum likelihood estimate. Because this likelihood surface is more complex than that, it's clear that the likelihood does not drop off symmetrically around the maximum likelihood estimate, which suggests the distribution of the maximum likelihood estimate may not be symmetric either. By plotting the likelihood profiles, we can see that in fact the likelihood is symmetric around the handling time parameter, but is very much not symmetric around the attack rate parameter. Judging from the likelihood surface and profiles, it seems unlikely that a normal approximation would work well. It's also worth noting that the likelihood changes much more quickly as we vary the attack rate than as we vary the handling time - which mirrors the fact that the standard error for the handling time is much larger than the standard error for the attack rate.**
 
@@ -282,7 +278,7 @@ for (i in 1:n_boot) {
 }
 ```
 
-**Question:** Plot histograms of these samples. The attack rate samples are in the first column, and the handling time samples are in the second. What do you notice about the distributions of each of these parameters?
+**Question:** Plot histograms of these samples. The attack rate samples are in the first column, and the handling time samples are in the second. What do you notice about the distributions of each of these parameters? **1 pt.**
 
 > **Surprisingly, the bootstrap distribution for the attack rate appears fairly symmetric (and quite narrow), while the bootstrap distribution for the handling time is fairly skewed. Judging from the bootstrap distributions alone, I'd be more inclined to trust the normal approximation for the attack rate than for the handling time.**
 
@@ -291,7 +287,7 @@ qplot(holling_boot[,1], binwidth = 0.0005) + xlab("log attack rate")
 qplot(holling_boot[,2], binwidth = 0.1) + xlab("log handling time")
 ```
 
-**Question:** Obtain 95% confidence intervals using (1) the bootstrap distribution, and (2) the MLE and Fisher standard errors. Back-transform these intervals so that the attack rate and handling time are interpretable. How do these compare?
+**Question:** Obtain 95% confidence intervals using (1) the bootstrap distribution, and (2) the MLE and Fisher standard errors. Back-transform these intervals so that the attack rate and handling time are interpretable. How do these compare? **1 pt.**
 
 > **The bootstrap confidence interval for the attack rate agrees pretty closely with the normal approximation using Fisher information, but the handling time confidence interval differs dramatically between the two methods - the bootstrap method produces a wider confidence interval.*
 
@@ -357,7 +353,7 @@ ReedfrogFuncresp %>%
 
 ## 1. Likelihood ratio tests
 
-Use a likelihood ratio test to assess the null hypothesis that the handling time $h$ is equal to 1 (i.e., that it takes a dragonfly about 1 day to eat/digest a tadpole). Refer back to the first assignment for how to do this - it involves obtaining a maximum likelihood estimate for $a$ while holding $h$ constant.
+Use a likelihood ratio test to assess the null hypothesis that the handling time $h$ is equal to 1 (i.e., that it takes a dragonfly about 1 day to eat/digest a tadpole). Refer back to the first assignment for how to do this - it involves obtaining a maximum likelihood estimate for $a$ while holding $h$ constant. **2 pts.**
 
 > **To do this, I modified the negative log likelihood function so that the handling time was a separate argument, so that the attack rate is the only parameter passed as the first argument (I renamed the first argument to "a" to make this clear). `optim` will only optimize the parameters passed as the first argument, which means it will only optimize `a`, so we can use this function to hold `h` constant and obtain the value of the negative log-likelihood at the restricted maximum likelihood estimate for `a`. This is the negative log likelihood for our reduced model, and we already have the negative log likelihood for the full model (stored in the `holling_mle` variable we created earlier). With these two things, we can compute the likelihood ratio test statistic and a p-value. The p-value I got is 0.15, which means that our maximum likelihood estimate of $\hat{h} \approx 0.7$ is not significantly different from a handling time of 1. This is consistent with the fact that our confidence interval for the handling time $h$ includes 1, regardless of the method we use to calculate it.**
 
@@ -415,7 +411,7 @@ nll_rogers <- function(par, P, t, N0, Nc) {
 }
 ```
 
-Obtain maximum-likelihood estimates for $a$ and $h$ under the Rogers model (Use the maximum-likelihood estimates for $a$ and $h$ from the Holling fit as starting parameters). Are the parameter estimates different? Why do you think they are / are not?
+Obtain maximum-likelihood estimates for $a$ and $h$ under the Rogers model (Use the maximum-likelihood estimates for $a$ and $h$ from the Holling fit as starting parameters). Are the parameter estimates different? Why do you think they are / are not? **2 pts.**
 
 > **The attack rate and handling time here are adjusted for the fact that the number of tadpoles is being depleted throughout the 14 days of the experiment. As the tadpoles become depleted, the attack rate of the predator decreases (imagine climbing down the functional response curve backwards, starting at high prey densities and going down), so we know that the estimates we get without accounting for depletion are probably biased downward. These estimates are higher because they correct that bias.**
 
@@ -437,7 +433,7 @@ $$
 AIC = 2k - 2\ln \mathcal{L}(\hat{\theta})
 $$
 
-where $k$ is the number of parameters in the model (2, for both models), and $- 2\ln \mathcal{L}(\hat{\theta})$ is twice the value of the negative log likelihood at the MLE. Compute the AIC for both models (the negative log likelihood at the MLE is returned from `optim` under the `$value` object).
+where $k$ is the number of parameters in the model (2, for both models), and $- 2\ln \mathcal{L}(\hat{\theta})$ is twice the value of the negative log likelihood at the MLE. Compute the AIC for both models (the negative log likelihood at the MLE is returned from `optim` under the `$value` object). **1 pt.**
 
 ```{r}
 AIC <- function(opt) 2*length(opt$par) + 2*opt$value
@@ -445,6 +441,6 @@ AIC <- function(opt) 2*length(opt$par) + 2*opt$value
 c(holling = AIC(holling_mle), rogers = AIC(rogers_mle))
 ```
 
-Does AIC prefer either model? Based on AIC and what you know of the study, which model would you prefer?
+Does AIC prefer either model? Based on AIC and what you know of the study, which model would you prefer? **1 pt.**
 
 > **AIC does not show clear support for either model, and in fact, the Rogers model actually fits slightly worse according to AIC ($\Delta AIC \approx 0.3$). Since they're both very close, and we have a strong reason to suspect that the Holling model is biased because it does not account for the process of depletion which is occurring across our 14 day study, I would choose the Rogers model. The warning that this is giving us, however, is that sometimes we can't use the data to distinguish between two competing models. These data show the same support for both models, so we have to use our knowledge of the study system to choose a superior model. And, the model that best describes the functional response in this study may not even be one of the ones we've considered - it's very possible that if we accounted for depletion across the range of the study in a different way, our parameter estimates would be different still.**

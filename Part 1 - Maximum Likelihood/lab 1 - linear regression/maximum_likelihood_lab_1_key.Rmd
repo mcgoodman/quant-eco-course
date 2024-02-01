@@ -5,7 +5,7 @@ date: "BIOHOPK 143H - Winter 2021"
 output: pdf_document
 ---
 
-```{r setup}
+```{r setup, include = FALSE}
 ## load the tidyverse packages
 if (!require("tidyverse")) install.packages("tidyverse"); library(tidyverse)
 
