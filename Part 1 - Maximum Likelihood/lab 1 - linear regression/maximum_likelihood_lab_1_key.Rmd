@@ -1,7 +1,7 @@
 ---
 title: 'Lab: Linear Regression by Maximum Likelihood'
 author: "answer key"
-date: "BIOHOPK 143H - Winter 2021"
+date: "OCEANS 143 - Winter 2024"
 output: pdf_document
 ---
 
